@@ -24,6 +24,8 @@ struct Command {
 static struct Command commands[] = {
 	{ "help", "Display this list of commands", mon_help },
 	{ "kerninfo", "Display information about the kernel", mon_kerninfo },
+	{ "sayhi", "Greet you by saying Hi!", mon_sayhi },
+	{ "bt", "View backtrace", mon_backtrace },
 };
 #define NCOMMANDS (sizeof(commands)/sizeof(commands[0]))
 
@@ -60,9 +62,42 @@ mon_kerninfo(int argc, char **argv, struct Trapframe *tf)
 }
 
 int
+mon_sayhi(int argc, char **argv, struct Trapframe *tf)
+{
+	int k = 43;
+	cprintf("Hello stranger %o!\n", k);
+	cprintf("Hello stranger %x!\n", k);
+	cprintf("Hello stranger %u!\n", k);
+	cprintf("Hello stranger %d!\n", k);
+	return 0;
+}
+
+int
 mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 {
-	// Your code here.
+	uint32_t current_eip = (uint32_t) &mon_backtrace;
+	uint32_t *prev_ebp_ptr = (uint32_t*)read_ebp();
+	cprintf("Stack backtrace:\n");
+	while (prev_ebp_ptr != 0) {
+		cprintf("ebp %08x  eip %08x  args ", (uint32_t)prev_ebp_ptr, current_eip);
+		int i=0;
+		for (i = 2; i < 7; i++) {
+			cprintf("%08x ", *(prev_ebp_ptr + i));
+		}
+		cprintf("\n");
+
+		struct Eipdebuginfo frame_info = { 0 };
+		debuginfo_eip(current_eip, &frame_info);
+		cprintf("    %s:%d: %.*s+%d\n", frame_info.eip_file, frame_info.eip_line
+				, frame_info.eip_fn_namelen, frame_info.eip_fn_name
+				, current_eip - frame_info.eip_fn_addr);
+
+		// set values for next loop
+		// set current_eip to return address from this function
+		current_eip = *(prev_ebp_ptr + 1);
+		// dereference ebp to get address of previous ebp
+		prev_ebp_ptr = (uint32_t*) *prev_ebp_ptr;
+	}
 	return 0;
 }
 
