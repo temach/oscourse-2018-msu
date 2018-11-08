@@ -12,6 +12,7 @@
 #include <kern/monitor.h>
 #include <kern/sched.h>
 #include <kern/cpu.h>
+#include <kern/kdebug.h>
 
 struct Env env_array[NENV];
 struct Env *curenv = NULL;
@@ -120,7 +121,18 @@ void
 env_init(void)
 {
 	// Set up envs array
-	//LAB 3: Your code here.
+	env_free_list = &env_array[0];
+	for (int i=0; i < NENV; i++) {
+		struct Env *en = &env_array[i];
+		en->env_id = 0;
+		en->env_parent_id = 0;
+		en->env_type = ENV_TYPE_KERNEL;
+		// dont add a link for the last elemnt in array
+		en->env_link = (i == (NENV - 1)) ? NULL : &env_array[i+1];
+		en->env_runs = 0;
+		en->env_status = ENV_FREE;
+		memset(&en->env_tf, 0, sizeof(en->env_tf));
+	}
 	
 	// Per-CPU part of the initialization
 	env_init_percpu();
@@ -159,9 +171,9 @@ int
 env_alloc(struct Env **newenv_store, envid_t parent_id)
 {
 	int32_t generation;
-	struct Env *e;
+	struct Env *e = env_free_list;
 
-	if (!(e = env_free_list)) {
+	if (! e) {
 		return -E_NO_FREE_ENV;
 	}
 
@@ -200,7 +212,17 @@ env_alloc(struct Env **newenv_store, envid_t parent_id)
 	e->env_tf.tf_ss = GD_KD | 0;
 	e->env_tf.tf_cs = GD_KT | 0;
 	//LAB 3: Your code here.
-	// e->env_tf.tf_esp = 0x210000;
+	// determine stack address
+	int32_t env_absolute_id = e - envs;
+	int32_t expected_addr = 0x220000 - (env_absolute_id * PGSIZE * 2);
+	int32_t expected_addr_lowest = expected_addr - (PGSIZE * 2);
+	// this extern char marks the top most point of kernel memory
+	extern char end[];
+	if ((char *)expected_addr_lowest < end)
+	{
+		return -E_NO_MEM;
+	}
+	e->env_tf.tf_esp = expected_addr;
 #else
 #endif
 	// You will set e->env_tf.tf_eip later.
@@ -220,15 +242,57 @@ bind_functions(struct Env *e, struct Elf *elf)
 	//find_function from kdebug.c should be used
 	//LAB 3: Your code here.
 
-	/*
-	*((int *) 0x00231008) = (int) &cprintf;
-	*((int *) 0x00221004) = (int) &sys_yield;
-	*((int *) 0x00231004) = (int) &sys_yield;
-	*((int *) 0x00241004) = (int) &sys_yield;
-	*((int *) 0x0022100c) = (int) &sys_exit;
-	*((int *) 0x00231010) = (int) &sys_exit;
-	*((int *) 0x0024100c) = (int) &sys_exit;
-	*/
+	struct Secthdr *sh_start = (struct Secthdr *) (((void *)elf) + elf->e_shoff);
+	struct Secthdr *sh = sh_start;
+	struct Secthdr *esh = (struct Secthdr *) (sh + elf->e_shnum);
+	// load each program segment (ignores ph flags)
+	for (; sh < esh; sh++) {
+		// p_pa is the load address of this segment (as well
+		// as the physical address)
+		if (sh->sh_type != ELF_SHT_SYMTAB) {
+			continue;
+		}
+
+		// for section header with type == .symtab, the sh_link member contains
+		// the section header index of the associated string table
+		// i.e. index of another section header which has a string table for symbols here
+		struct Secthdr *sh_string_table = sh_start + sh->sh_link;
+		if (sh_string_table->sh_type != ELF_SHT_STRTAB) {
+			panic("can not find string table when loading user program from elf\n");
+		}
+		char *symbol_names = ((void *)elf) + sh_string_table->sh_offset;
+
+		struct Elf32_Sym *sym = ((void *)elf) + sh->sh_offset;
+		struct Elf32_Sym *esym = ((void *)elf) + sh->sh_offset + sh->sh_size;
+		// for section header with type == .symtab, the sh_info member contains
+		// a number equal to ((index of the last LOCAL symbol in symbol-table) + 1)
+		// so index of the first symbol with GLOBAL binding
+		sym += sh->sh_info;
+
+		for (; sym < esym; sym++) {
+			if (! sym->st_name) {
+				// the symbol has no name, not interesting for us
+				continue;
+			}
+			if (ELF32_ST_BIND(sym->st_info) != STB_GLOBAL) {
+				// the symbol is not global, not interesting for us
+				continue;
+			}
+			if (ELF32_ST_TYPE(sym->st_info) != STT_OBJECT
+				&& ELF32_ST_TYPE(sym->st_info) != STT_FUNC) {
+				// the symbol is not an object and not a function, not interesting
+				continue;
+			}
+			uintptr_t func = find_function(symbol_names + sym->st_name);
+			if (func == 0) {
+				// if did not find a function with such name, just skip this
+				continue;
+			}
+			// else we found a function corresponding to this symbol, link them
+			// take the virtual address of the variable and write address of function to it
+			*((uintptr_t *)sym->st_value) = func;
+		}
+	}
 }
 #endif
 
@@ -273,12 +337,40 @@ load_icode(struct Env *e, uint8_t *binary, size_t size)
 	//  You must also do something with the program's entry point,
 	//  to make sure that the environment starts executing there.
 	//  What?  (See env_run() and env_pop_tf() below.)
-
-	//LAB 3: Your code here.
 	
+	(void)size;
+
+	struct Elf *elf_header = (struct Elf*) binary;
+
+	// is this a valid ELF?
+	if (elf_header->e_magic != ELF_MAGIC) {
+		return;
+	}
+
+	struct Proghdr *ph = (struct Proghdr *) (binary + elf_header->e_phoff);
+	struct Proghdr *eph = (struct Proghdr *) (ph + elf_header->e_phnum);
+	// load each program segment (ignores ph flags)
+	for (; ph < eph; ph++) {
+		// p_pa is the load address of this segment (as well
+		// as the physical address)
+		if (ph->p_type != ELF_PROG_LOAD) {
+			continue;
+		}
+		memmove((void*)ph->p_va, binary + ph->p_offset, ph->p_filesz);
+		memset((void*)(ph->p_va + ph->p_filesz), 0, ph->p_memsz - ph->p_filesz);
+	}
+
+	// int32_t total_size = total_mapping_size(
+	// 	(struct Proghdr *)(binary + elf_header->e_phoff)
+	// 	, elf_header->e_phnum
+	// );
+
+	e->env_tf.tf_eip = elf_header->e_entry;
+	// e->env_tf.tf_esp = total_size;
+
 #ifdef CONFIG_KSPACE
 	// Uncomment this for task №5.
-	//bind_functions();
+	bind_functions(e, elf_header);
 #endif
 }
 
@@ -292,7 +384,15 @@ load_icode(struct Env *e, uint8_t *binary, size_t size)
 void
 env_create(uint8_t *binary, size_t size, enum EnvType type)
 {
-	//LAB 3: Your code here.
+	int32_t retval = 0;
+	struct Env *newenv;
+
+	retval = env_alloc(&newenv, 0);
+	if (retval < 0) {
+		panic("env_alloc error: %i\n", retval);
+	}
+	load_icode(newenv, binary, size);
+	newenv->env_type = type;
 }
 
 //
@@ -318,12 +418,11 @@ env_free(struct Env *e)
 void
 env_destroy(struct Env *e)
 {
-	//LAB 3: Your code here.
 	env_free(e);
 
-	cprintf("Destroyed the only environment - nothing more to do!\n");
-	while (1)
-		monitor(NULL);
+	if (e == curenv) {
+		sched_yield();
+	}
 }
 
 #ifdef CONFIG_KSPACE
@@ -355,6 +454,9 @@ env_pop_tf(struct Trapframe *tf)
 	static uintptr_t eip = 0;
 	eip = tf->tf_eip;
 
+	// see here for how to set eip.
+	// https://stackoverflow.com/questions/8333413/why-cant-you-set-the-instruction-pointer-directly
+	// spoiler: its done with "push eax; ret;" because ret = pop + jmp
 	asm volatile (
 		"mov %c[ebx](%[tf]), %%ebx \n\t"
 		"mov %c[ecx](%[tf]), %%ecx \n\t"
@@ -417,10 +519,13 @@ env_run(struct Env *e)
 	//	e->env_tf.  Go back through the code you wrote above
 	//	and make sure you have set the relevant parts of
 	//	e->env_tf to sensible values.
-	//
-	//LAB 3: Your code here.
-
-
-	env_pop_tf(&e->env_tf);
+	
+	if (curenv != NULL && curenv->env_status == ENV_RUNNING) {
+		curenv->env_status = ENV_RUNNABLE;
+	}
+	curenv = e;
+	curenv->env_status = ENV_RUNNING;
+	curenv->env_runs++;
+	env_pop_tf(&curenv->env_tf);
 }
 

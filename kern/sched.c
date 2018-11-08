@@ -24,10 +24,24 @@ sched_yield(void)
 	// If there are no runnable environments,
 	// simply drop through to the code
 	// below to halt the cpu.
-
-	//LAB 3: Your code here.
-	env_run(&envs[0]);
 	
+	// find previously run env
+	int32_t curindex = (curenv == NULL) ? -1 : curenv - envs;
+	
+	// do NENV loops, searching for running env modulo NENV,
+	// start search right after current ENV_RUNNING
+	for (int32_t i = 0; i < NENV; i++)
+	{
+		curindex += 1;
+		int32_t index = curindex % NENV;
+		if (envs[index].env_status == ENV_RUNNABLE
+			|| envs[index].env_status == ENV_RUNNING)
+		{
+
+			env_run(&envs[index]);
+		}
+	}
+
 	// sched_halt never returns
 	sched_halt();
 }

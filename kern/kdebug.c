@@ -214,9 +214,39 @@ debuginfo_eip(uintptr_t addr, struct Eipdebuginfo *info)
 uintptr_t
 find_function(const char * const fname)
 {
-	// const struct Stab *stabs = __STAB_BEGIN__, *stab_end = __STAB_END__;
-	// const char *stabstr = __STABSTR_BEGIN__, *stabstr_end = __STABSTR_END__;
+	const struct Stab *stabs = __STAB_BEGIN__, *stab_end = __STAB_END__;
+	const char *stabstr = __STABSTR_BEGIN__, *stabstr_end = __STABSTR_END__;
 	//LAB 3: Your code here.
+
+	// String table validity checks
+	if (stabstr_end <= stabstr || stabstr_end[-1] != 0)
+		return 0;
+
+	// iterate over all stabs
+	for (stabs = __STAB_BEGIN__; stabs < stab_end; stabs++)
+	{
+		if (stabs->n_type != N_FUN)
+		{
+			// if this stab is not about a function then skip it
+			continue;
+		}
+
+		// this stab is about a function
+		// stab->n_strx points to the function name
+		// in the string table, but check bounds just in case.
+		if (stabs->n_strx < (uint32_t)(stabstr_end - stabstr))
+		{
+			// compare the function name that you found with the given fname
+			const char *fn_name = stabstr + stabs->n_strx;
+			int32_t fn_namelen = strfind(fn_name, ':') - fn_name;
+			if (memcmp(fn_name, fname, fn_namelen) == 0)
+			{
+				// the name is the same
+				// return virtual address of function in kernel
+				return stabs->n_value;
+			}
+		}
+	}
 
 	return 0;
 }
