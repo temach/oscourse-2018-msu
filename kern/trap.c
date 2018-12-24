@@ -136,6 +136,10 @@ trap_dispatch(struct Trapframe *tf)
 	}
 
 	if (tf->tf_trapno == IRQ_OFFSET + IRQ_CLOCK) {
+		// read RTC status reg just to recet the interrupt flag
+		(void)rtc_check_status();
+		// send EndOfInterrupt with IRQ_CLOCK as value
+		pic_send_eoi(IRQ_CLOCK);
 		sched_yield();
 		return;
 	}
