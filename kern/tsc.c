@@ -10,6 +10,9 @@
 #define DEFAULT_FREQ 2500000
 #define TIMES 100
 
+static uint64_t ticks_start;
+static bool ticks_valid = false;
+
 unsigned long cpu_freq;
 /*
  * This reads the current MSB of the PIT counter, and
@@ -195,9 +198,19 @@ void print_timer_error(void)
 //Use print_timer_error function to print error.
 void timer_start(void)
 {
+	ticks_start = read_tsc();
+	ticks_valid = true;
 }
 
 void timer_stop(void)
 {
+	if (ticks_valid) {
+		uint64_t ticks_diff = read_tsc() - ticks_start;
+		uint64_t time = ticks_diff / cpu_freq;
+		cprintf("%llu\n", time / 1000);
+		ticks_valid = false;
+	} else {
+		cprintf("Timer Error\n");
+	}
 }
 
