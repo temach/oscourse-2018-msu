@@ -177,7 +177,7 @@ debuginfo_eip(uintptr_t addr, struct Eipdebuginfo *info)
 	if (lfun <= rfun) {
 		// stabs[lfun] points to the function name
 		// in the string table, but check bounds just in case.
-		if (stabs[lfun].n_strx < stabstr_end - stabstr)
+		if (stabs[lfun].n_strx < (uint32_t)(stabstr_end - stabstr))
 			info->eip_fn_name = stabstr + stabs[lfun].n_strx;
 		info->eip_fn_addr = stabs[lfun].n_value;
 		addr -= info->eip_fn_addr;
@@ -221,7 +221,7 @@ debuginfo_eip(uintptr_t addr, struct Eipdebuginfo *info)
 	       && stabs[lline].n_type != N_SOL
 	       && (stabs[lline].n_type != N_SO || !stabs[lline].n_value))
 		lline--;
-	if (lline >= lfile && stabs[lline].n_strx < stabstr_end - stabstr)
+	if (lline >= lfile && stabs[lline].n_strx < (uint32_t)(stabstr_end - stabstr))
 		info->eip_file = stabstr + stabs[lline].n_strx;
 
 

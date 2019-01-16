@@ -15,6 +15,7 @@
 #include <kern/trap.h>
 
 #define CMDBUF_SIZE	80	// enough for one VGA text line
+#define UNUSED(x)	((void)(x))
 
 
 struct Command {
@@ -39,7 +40,10 @@ static struct Command commands[] = {
 int
 mon_help(int argc, char **argv, struct Trapframe *tf)
 {
-	int i;
+	UNUSED(argc);
+	UNUSED(argv);
+	UNUSED(tf);
+	uint32_t i;
 
 	for (i = 0; i < NCOMMANDS; i++)
 		cprintf("%s - %s\n", commands[i].name, commands[i].desc);
@@ -49,6 +53,9 @@ mon_help(int argc, char **argv, struct Trapframe *tf)
 int
 mon_kerninfo(int argc, char **argv, struct Trapframe *tf)
 {
+	UNUSED(argc);
+	UNUSED(argv);
+	UNUSED(tf);
 	extern char _start[], entry[], etext[], edata[], end[];
 
 	cprintf("Special kernel symbols:\n");
@@ -69,6 +76,9 @@ mon_kerninfo(int argc, char **argv, struct Trapframe *tf)
 int
 mon_sayhi(int argc, char **argv, struct Trapframe *tf)
 {
+	UNUSED(argc);
+	UNUSED(argv);
+	UNUSED(tf);
 	int k = 43;
 	cprintf("Hello stranger %o!\n", k);
 	cprintf("Hello stranger %x!\n", k);
@@ -80,6 +90,9 @@ mon_sayhi(int argc, char **argv, struct Trapframe *tf)
 int
 mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 {
+	UNUSED(argc);
+	UNUSED(argv);
+	UNUSED(tf);
 	uint32_t current_eip = (uint32_t) &mon_backtrace;
 	uint32_t *prev_ebp_ptr = (uint32_t*)read_ebp();
 	cprintf("Stack backtrace:\n");
@@ -109,6 +122,9 @@ mon_backtrace(int argc, char **argv, struct Trapframe *tf)
 int
 mon_tstart(int argc, char **argv, struct Trapframe *tf)
 {
+	UNUSED(argc);
+	UNUSED(argv);
+	UNUSED(tf);
 	timer_start();
 	return 0;
 }
@@ -116,6 +132,9 @@ mon_tstart(int argc, char **argv, struct Trapframe *tf)
 int
 mon_tstop(int argc, char **argv, struct Trapframe *tf)
 {
+	UNUSED(argc);
+	UNUSED(argv);
+	UNUSED(tf);
 	timer_stop();
 	return 0;
 }
@@ -131,7 +150,7 @@ runcmd(char *buf, struct Trapframe *tf)
 {
 	int argc;
 	char *argv[MAXARGS];
-	int i;
+	uint32_t i;
 
 	// Parse the command buffer into whitespace-separated arguments
 	argc = 0;

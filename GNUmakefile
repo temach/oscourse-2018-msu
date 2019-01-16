@@ -108,9 +108,9 @@ GDBPORT	:= $(shell expr `id -u` % 5000 + 25000)
 # Compiler flags
 # -fno-builtin is required to avoid refs to undefined functions in the kernel.
 # Only optimize to -O1 to discourage inlining, which complicates backtraces.
-CFLAGS := $(CFLAGS) $(DEFS) $(LABDEFS) -O1 -fno-builtin -I$(TOP) -MD
+CFLAGS := $(CFLAGS) $(DEFS) $(LABDEFS) -O0 -g3 -fno-builtin -I$(TOP) -MD
 CFLAGS += -fno-omit-frame-pointer
-CFLAGS += -Wall -Wformat=2 -Wno-unused-function -Werror
+CFLAGS += -Wall -Wformat=2 -Wextra
 
 # Add -fno-stack-protector if the option exists.
 CFLAGS += $(shell $(CC) -fno-stack-protector -E -x c /dev/null >/dev/null 2>&1 && echo -fno-stack-protector)
@@ -254,7 +254,7 @@ endif
 
 QEMUOPTS += $(shell if $(QEMU) -nographic -help | grep -q '^-D '; then echo '-D qemu.log'; fi)
 IMAGES = $(OBJDIR)/kern/kernel.img
-QEMUOPTS += $(QEMUEXTRA)
+QEMUOPTS += -nographic $(QEMUEXTRA)
 
 define POST_CHECKOUT
 #!/bin/sh -x
