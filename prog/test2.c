@@ -15,6 +15,8 @@ void (* volatile xc(GRADE3_FAIL,GRADE3_PFX1)) (void);
 void
 umain( int argc, char **argv )
 {
+	(void)argc;
+	(void)argv;
 	int test2_i;
 	int test2_j;
 
