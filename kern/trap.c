@@ -34,6 +34,28 @@ struct Pseudodesc idt_pd = {
 	sizeof(idt) - 1, (uint32_t) idt
 };
 
+/* interrupt handlers from trapentry.S */
+void divide_thdlr();
+void debug_thdlr();
+void nmi_thdlr();
+void brkpt_thdlr();
+void oflow_thdlr();
+void bound_thdlr();
+void illop_thdlr();
+void device_thdlr();
+void dblflt_thdlr();
+
+void tss_thdlr();
+void segnp_thdlr();
+void stack_thdlr();
+void gpflt_thdlr();
+void pgflt_thdlr();
+void fperr_thdlr();
+void align_thdlr();
+void mchk_thdlr();
+void simderr_thdlr();
+
+void syscall_thdlr();
 
 static const char *trapname(int trapno)
 {
@@ -72,13 +94,40 @@ static const char *trapname(int trapno)
 void
 trap_init(void)
 {
-//	extern struct Segdesc gdt[];
-
+	// extern struct Segdesc gdt[];
+	int32_t i = 0;
+	for (i = 0; i < 256; i++) {
+		SETGATE(idt[i], 0, GD_KT, NULL, 0);
+	}
+	
 	// LAB 8: Your code here.
+	SETGATE(idt[T_DIVIDE], 0, GD_KT, (int)(& divide_thdlr), 0);
+	SETGATE(idt[T_DEBUG ], 0, GD_KT, (int)(& debug_thdlr ), 0);
+	SETGATE(idt[T_NMI   ], 0, GD_KT, (int)(& nmi_thdlr   ), 0);
+	SETGATE(idt[T_BRKPT ], 0, GD_KT, (int)(& brkpt_thdlr ), 3);
+	SETGATE(idt[T_OFLOW ], 0, GD_KT, (int)(& oflow_thdlr ), 0);
+	SETGATE(idt[T_BOUND ], 0, GD_KT, (int)(& bound_thdlr ), 0);
+	SETGATE(idt[T_ILLOP ], 0, GD_KT, (int)(& illop_thdlr ), 0);
+	SETGATE(idt[T_DEVICE], 0, GD_KT, (int)(& device_thdlr), 0);
+	SETGATE(idt[T_DBLFLT], 0, GD_KT, (int)(& dblflt_thdlr), 0);
+
+	SETGATE(idt[T_TSS    ], 0, GD_KT, (int)(& tss_thdlr     ), 0);
+	SETGATE(idt[T_SEGNP  ], 0, GD_KT, (int)(& segnp_thdlr   ), 0);
+	SETGATE(idt[T_STACK  ], 0, GD_KT, (int)(& stack_thdlr   ), 0);
+	SETGATE(idt[T_GPFLT  ], 0, GD_KT, (int)(& gpflt_thdlr   ), 0);
+	SETGATE(idt[T_PGFLT  ], 0, GD_KT, (int)(& pgflt_thdlr   ), 0);
+	SETGATE(idt[T_FPERR  ], 0, GD_KT, (int)(& fperr_thdlr   ), 0);
+	SETGATE(idt[T_ALIGN  ], 0, GD_KT, (int)(& align_thdlr   ), 0);
+	SETGATE(idt[T_MCHK   ], 0, GD_KT, (int)(& mchk_thdlr    ), 0);
+	SETGATE(idt[T_SIMDERR], 0, GD_KT, (int)(& simderr_thdlr ), 0);
+
+	SETGATE(idt[T_SYSCALL], 0, GD_KT, (int)(& syscall_thdlr ), 3);
 
 	// Per-CPU setup 
 	trap_init_percpu();
 }
+
+
 
 // Initialize and load the per-CPU TSS and IDT
 void
@@ -173,6 +222,23 @@ trap_dispatch(struct Trapframe *tf)
 		return;
 	}
 
+	if (tf->tf_trapno == T_PGFLT) {
+		page_fault_handler(tf);
+		return;
+	}
+	
+	if (tf->tf_trapno == T_SYSCALL) {
+		struct PushRegs *r = &curenv->env_tf.tf_regs;
+		int32_t tmp = syscall(r->reg_eax, r->reg_edx, r->reg_ecx, r->reg_ebx, r->reg_edi, r->reg_esi);
+		r->reg_eax = tmp;
+		return;
+	}
+	
+	if (tf->tf_trapno == T_BRKPT) {
+		monitor(tf);
+		return;
+	} 
+
 	if (tf->tf_trapno == IRQ_OFFSET + IRQ_CLOCK) {
 		// read RTC status reg just to recet the interrupt flag
 		(void)rtc_check_status();
@@ -253,8 +319,33 @@ page_fault_handler(struct Trapframe *tf)
 	fault_va = rcr2();
 
 	// Handle kernel-mode page faults.
+	if ((tf->tf_cs & 3) == 0) {
+		// just panic, nothing we can do
+		panic("kernel mode page fault");
+	}
 
 	// LAB 8: Your code here.
+
+	// page 95 of Programming on asm on platform x86-64 by Ruslan Ablyazov
+	// uint32_t error_code = tf->tf_err;
+	// if (error_code & PTE_P) {
+	// 	// permission error
+	// 	// just terminate
+	// } else {
+	//	// error due to absent page
+	// }
+	//
+	// if (error_code & PTE_U) {
+	// 	// error made by user space code
+	// } else {
+	//	// error made by kernel code
+	// }
+	//
+	// if (error_code & PTE_W) {
+	// 	// error made while writing to address
+	// } else {
+	//	// error made by reading from address
+	// }
 
 	// We've already handled kernel-mode exceptions, so if we get here,
 	// the page fault happened in user mode.

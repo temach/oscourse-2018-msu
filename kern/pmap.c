@@ -173,6 +173,8 @@ mem_init(void)
 	//////////////////////////////////////////////////////////////////////
 	// Make 'envs' point to an array of size 'NENV' of 'struct Env'.
 	// LAB 8: Your code here.
+	envs = boot_alloc(NENV * sizeof(struct Env));
+	memset(envs, 0, NENV * sizeof(struct Env));
 
 	//////////////////////////////////////////////////////////////////////
 	// Now that we've allocated the initial kernel data structures, we set
@@ -212,6 +214,14 @@ mem_init(void)
 	//    - the new image at UENVS  -- kernel R, user R
 	//    - envs itself -- kernel RW, user NONE
 	// LAB 8: Your code here.
+	i = 0;
+	n = ROUNDUP(NENV*sizeof(struct Env), PGSIZE);
+	for (i = 0; i < n; i += PGSIZE) {
+		struct PageInfo* page_with_envs_array = pa2page(PADDR(envs) + i);
+		page_insert(kern_pgdir, page_with_envs_array, (void*)(UENVS + i), PTE_U);
+		// this is a hack, because page_insert increments ref
+		page_with_envs_array->pp_ref--;
+	}
 
 	//////////////////////////////////////////////////////////////////////
 	// Use the physical memory that 'bootstack' refers to as the kernel
@@ -481,7 +491,7 @@ pgdir_walk(pde_t *pgdir, const void *va, int create)
 	}
 	page_for_new_table->pp_ref++;
 
-	uint32_t permissions = (PTE_P | PTE_W);
+	uint32_t permissions = (PTE_P | PTE_W | PTE_U);
 	pde_t new_pgdir_entry = page2pa(page_for_new_table) | permissions;
 	pgdir[PDX(va)] = new_pgdir_entry;
 
@@ -657,6 +667,29 @@ int
 user_mem_check(struct Env *env, const void *va, size_t len, int perm)
 {
 	// LAB 8: Your code here.
+	void* va_pg_align = (void*)ROUNDDOWN(va, PGSIZE);
+	const void* va_end_pg_align = ROUNDUP(va + len, PGSIZE);
+	uint32_t size = (va_end_pg_align - va_pg_align);
+	uint32_t mapped = 0;
+	for (mapped = 0; mapped < size; /* continue */ ) {
+		pte_t *entry = NULL;
+		struct PageInfo *pi = page_lookup(env->env_pgdir, va_pg_align, &entry);
+		if (! pi 
+		    || ! (*entry & perm)
+		    || (uint32_t)va_pg_align >= ULIM
+		) {
+			// would like to just return va_pg_align, as the page address, but then the tests dont pass
+			if (va_pg_align < va) {
+				user_mem_check_addr = (uintptr_t)va;
+				return -E_FAULT;
+			} else {
+				user_mem_check_addr = (uintptr_t)va_pg_align;
+				return -E_FAULT;
+			}
+		}
+		mapped += PGSIZE;
+		va_pg_align += PGSIZE;
+	}
 
 	return 0;
 }

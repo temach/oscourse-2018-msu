@@ -127,14 +127,14 @@ void
 env_init(void)
 {
 	// Set up envs array
-	env_free_list = &env_array[0];
+	env_free_list = &envs[0];
 	for (int i=0; i < NENV; i++) {
-		struct Env *en = &env_array[i];
+		struct Env *en = &envs[i];
 		en->env_id = 0;
 		en->env_parent_id = 0;
 		en->env_type = ENV_TYPE_KERNEL;
 		// dont add a link for the last elemnt in array
-		en->env_link = (i == (NENV - 1)) ? NULL : &env_array[i+1];
+		en->env_link = (i == (NENV - 1)) ? NULL : &envs[i+1];
 		en->env_runs = 0;
 		en->env_status = ENV_FREE;
 		memset(&en->env_tf, 0, sizeof(en->env_tf));
@@ -199,8 +199,31 @@ env_setup_vm(struct Env *e)
 	//	is an exception -- you need to increment env_pgdir's
 	//	pp_ref for env_free to work correctly.
 	//    - The functions in kern/pmap.h are handy.
-
+	
 	// LAB 8: Your code here.
+
+	// since we never page_insert this page we must increment ref ourselves
+	p->pp_ref++;
+
+	e->env_pgdir = page2kva(p);
+
+	memcpy(e->env_pgdir, kern_pgdir, PGSIZE);
+
+	uint32_t i = 0;
+	// mark pde_t with user pages as user availiable
+	// mark pde_t with kernel pages as unavailiable
+	for (i = 0; i < NPDENTRIES; i++) {
+		if (i <= PDX(UTOP)) {
+			e->env_pgdir[i] |= PTE_U;
+			e->env_pgdir[i] |= PTE_W;
+			// pte_t *p = (pte_t*) KADDR(PTE_ADDR(e->env_pgdir[i]));
+			// uint32_t k = 0;
+			// for (k = 0; k < NPTENTRIES; k++) {
+			// 	p[k] |= PTE_U;
+			// 	p[k] |= PTE_W;
+			// }
+		}
+	}
 
 	// UVPT maps the env's own page table read-only.
 	// Permissions: kernel R, user R
@@ -316,6 +339,18 @@ region_alloc(struct Env *e, void *va, size_t len)
 	//   'va' and 'len' values that are not page-aligned.
 	//   You should round va down, and round (va + len) up.
 	//   (Watch out for corner-cases!)
+
+	void* va_pg_align = ROUNDDOWN(va, PGSIZE);
+	void* va_end_pg_align = ROUNDUP(va + len, PGSIZE);
+	uint32_t size = (va_end_pg_align - va_pg_align);
+	uint32_t mapped = 0;
+	for (mapped = 0; mapped < size; /* continue */ ) {
+		struct PageInfo *pi = page_alloc(0);
+		page_insert(e->env_pgdir, pi, va_pg_align, PTE_U | PTE_W);
+
+		mapped += PGSIZE;
+		va_pg_align += PGSIZE;
+	}
 }
 
 #ifdef CONFIG_KSPACE
@@ -441,6 +476,9 @@ load_icode(struct Env *e, uint8_t *binary, size_t size)
 		return;
 	}
 
+
+	lcr3(PADDR(e->env_pgdir));
+
 	struct Proghdr *ph = (struct Proghdr *) (binary + elf_header->e_phoff);
 	struct Proghdr *eph = (struct Proghdr *) (ph + elf_header->e_phnum);
 	// load each program segment (ignores ph flags)
@@ -450,7 +488,8 @@ load_icode(struct Env *e, uint8_t *binary, size_t size)
 		if (ph->p_type != ELF_PROG_LOAD) {
 			continue;
 		}
-		memmove((void*)ph->p_va, binary + ph->p_offset, ph->p_filesz);
+		region_alloc(e, (void*)ph->p_va, ph->p_memsz);
+		memmove((void*)(ph->p_va), binary + ph->p_offset, ph->p_filesz);
 		memset((void*)(ph->p_va + ph->p_filesz), 0, ph->p_memsz - ph->p_filesz);
 	}
 
@@ -459,6 +498,15 @@ load_icode(struct Env *e, uint8_t *binary, size_t size)
 	// 	, elf_header->e_phnum
 	// );
 
+	// Now map one page for the program's initial stack
+	// at virtual address USTACKTOP - USTACKSIZE.
+	// LAB 8: Your code here.
+	uint32_t va_stack_addr = USTACKTOP - USTACKSIZE;
+	region_alloc(e, (void *)(va_stack_addr), USTACKSIZE);
+	memset((void*)(va_stack_addr), 0, USTACKSIZE);
+
+	lcr3(PADDR(kern_pgdir));
+
 	e->env_tf.tf_eip = elf_header->e_entry;
 	// e->env_tf.tf_esp = total_size;
 
@@ -466,9 +514,7 @@ load_icode(struct Env *e, uint8_t *binary, size_t size)
 	// Uncomment this for task №5.
 	bind_functions(e, elf_header);
 #endif
-	// Now map one page for the program's initial stack
-	// at virtual address USTACKTOP - USTACKSIZE.
-	// LAB 8: Your code here.
+
 
 #ifdef SANITIZE_USER_SHADOW_BASE
 	region_alloc(e, (void *) SANITIZE_USER_SHADOW_BASE, SANITIZE_USER_SHADOW_SIZE);
@@ -681,6 +727,7 @@ env_run(struct Env *e)
 	curenv = e;
 	curenv->env_status = ENV_RUNNING;
 	curenv->env_runs++;
+	lcr3(PADDR(e->env_pgdir));
 	env_pop_tf(&curenv->env_tf);
 }
 
