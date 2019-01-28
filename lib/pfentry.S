@@ -65,18 +65,46 @@ _pgfault_upcall:
 	// ways as registers become unavailable as scratch space.
 	//
 	// LAB 9: Your code here.
+	// pop fault_va
+	addl $4, %esp
+	// pop tf_err
+	addl $4, %esp
+
+	// exchange eflags with eip, to make eip closer to UXSTACKTOP
+	// copy the saved eip to EAX (we copied esp from Trapframe to UTrapframe, and overwrote the one in Trapframe)
+	movl 32(%esp), %eax
+	// copy the saved esp to EBX register
+	movl 40(%esp), %ebx
+	// create more space on the trapframe's stack
+	subl $4, %ebx
+	// move eip to that space, so on ret that eip will be popped and used by CPU
+	movl %eax, (%ebx)
+	// save the modified esp for user trapframe, so later when we pop it, we pop the value that is 4 bytes less to include the newly given eip
+	movl %ebx, 40(%esp)
+
+	// popfl
+	// push %eax
+	// pushfl
 
 	// Restore the trap-time registers.  After you do this, you
 	// can no longer modify any general-purpose registers.
 	// LAB 9: Your code here.
+	popal
+	// pop user trapframe eip
+	addl $4, %esp
 
 	// Restore eflags from the stack.  After you do this, you can
 	// no longer use arithmetic operations or anything else that
 	// modifies eflags.
 	// LAB 9: Your code here.
+	popfl
 
 	// Switch back to the adjusted trap-time stack.
 	// LAB 9: Your code here.
+	// take the saved esp value into the ESP register
+	// dont need to worry about ebp, because esp now points to saved eip
+	popl %esp
 
 	// Return to re-execute the instruction that faulted.
 	// LAB 9: Your code here.
+	ret

@@ -23,7 +23,7 @@ LABSETUP ?= ./
 
 TOP = .
 
-CFLAGS	+= -pipe -m32
+CFLAGS	+= -pipe -m32 -fno-pic -fno-pie -fno-PIC -fno-PIE -Wl,-flinker-output=exec -fno-plt
 
 ifdef JOSLLVM
 
