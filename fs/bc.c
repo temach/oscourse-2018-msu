@@ -52,6 +52,18 @@ bc_pgfault(struct UTrapframe *utf)
 	// the disk.
 	//
 	// LAB 10: you code here:
+	void *va = ROUNDDOWN(addr, PGSIZE);
+	r = sys_page_alloc(thisenv->env_id, va, PTE_W | PTE_U);
+	if (r < 0) {
+		panic("error sys_page_alloc: %d", r);
+	}
+
+	uint32_t number_sectors = BLKSIZE / SECTSIZE;
+	uint32_t sector_number =  number_sectors * blockno;
+	r = ide_read(sector_number, va, number_sectors);
+	if (r < 0 ) {
+		panic("error ide_read failed");
+	}
 
 	// Clear the dirty bit for the disk block page since we just read the
 	// block from disk
@@ -75,13 +87,31 @@ bc_pgfault(struct UTrapframe *utf)
 void
 flush_block(void *addr)
 {
-	//uint32_t blockno = ((uint32_t)addr - DISKMAP) / BLKSIZE;
+	uint32_t blockno = ((uint32_t)addr - DISKMAP) / BLKSIZE;
 
 	if (addr < (void*)DISKMAP || addr >= (void*)(DISKMAP + DISKSIZE))
 		panic("flush_block of bad va %p", addr);
 
 	// LAB 10: Your code here.
-	panic("flush_block not implemented");
+	if (! va_is_mapped(addr) || ! va_is_dirty(addr)) {
+		return;
+	}
+
+	int32_t retval = 0;
+	uint32_t sectors = (BLKSIZE / SECTSIZE);
+	void* va = ROUNDDOWN(addr, PGSIZE);
+	retval = ide_write(sectors * blockno, va, sectors);
+	if (retval < 0) {
+		panic("error ide_write failed");
+	}
+
+	int32_t page_number = PGNUM(addr);
+	uint32_t entry = uvpt[page_number];
+	// remap page to clear PTE_D flag
+	retval = sys_page_map(0, va, 0, va, entry & PTE_SYSCALL);
+	if (retval < 0) {
+		panic ("error sys_page_map: %d", retval);
+	}
 }
 
 // Test that the block cache works, by smashing the superblock and
