@@ -565,6 +565,8 @@ page_insert(pde_t *pgdir, struct PageInfo *pp, void *va, int perm)
 	uint32_t permissions = perm | PTE_P;
 	pte_t entry = page2pa(pp) | permissions;
 	*entry_ptr = entry;
+	// in case page_remove actually killed the page and we re-inserted it, we must ltb_invalidate
+	tlb_invalidate(pgdir, va);
 	return 0;
 }
 
