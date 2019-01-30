@@ -85,8 +85,9 @@ duppage(envid_t envid, unsigned pn)
 	pte_t entry = uvpt[pn];
 
 	int32_t retval = 0;
-	if (! (entry & PTE_W || entry & PTE_COW)) {
-		// if the parents page is readonly, then map it to child directly (preserve page flags)
+	if (! (entry & PTE_W || entry & PTE_COW)
+	  || (entry & PTE_SHARE) ) {
+		// if the parents page is readonly or shared: [ (not (W or COW)) or (SHARE) ], then map it to child directly (preserve page flags)
 		retval = sys_page_map(thisenv->env_id, va, envid, va, entry & PTE_SYSCALL);
 		if (retval < 0) {
 			panic("sys_page_map: %d", retval);

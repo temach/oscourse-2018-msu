@@ -55,7 +55,18 @@ again:
 			// then close the original 'fd'.
 
 			// LAB 11: Your code here.
-			panic("< redirection not implemented");
+			if ((fd = open(t, O_RDONLY)) < 0) {
+				cprintf("sh: open %s: %i", t, fd);
+				exit();
+			}
+			if (fd != 0) {
+				int res = dup(fd, 0);
+				if (res < 0) {
+					cprintf("sh: failed dup: %i", res);
+					exit();
+				}
+				close(fd);
+			}
 			break;
 
 		case '>':	// Output redirection

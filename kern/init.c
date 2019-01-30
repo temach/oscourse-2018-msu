@@ -83,7 +83,8 @@ i386_init(void)
 	// ENV_CREATE(user_faultallocbad, ENV_TYPE_USER);
 	// ENV_CREATE(user_faultnostack, ENV_TYPE_USER);
 	// ENV_CREATE(user_faultallocbad, ENV_TYPE_USER);
-	ENV_CREATE(user_icode, ENV_TYPE_USER);
+	ENV_CREATE(user_testshell, ENV_TYPE_USER);
+	// ENV_CREATE(user_icode, ENV_TYPE_USER);
 #endif // TEST*
 #endif
 

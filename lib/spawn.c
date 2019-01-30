@@ -315,6 +315,25 @@ static int
 copy_shared_pages(envid_t child)
 {
 	// LAB 11: Your code here.
+	uint32_t va = 0;
+	for (va = 0; va < UTOP ; va += PGSIZE) {
+		uint32_t pde_index_debug = PDX(va);
+		uint32_t page_number = PGNUM(va);
+		uint32_t uvpd_entry = uvpd[pde_index_debug];
+		if ( !(uvpd_entry & PTE_P)) {
+			// just skip the whole page directory and assosiated page tables
+			va += PGSIZE * (NPTENTRIES - 1);
+			continue;
+		}
+		uint32_t uvpt_entry = uvpt[page_number];
+		if (uvpt_entry & PTE_P && uvpt_entry & PTE_SHARE) {
+			// if the page is present and shared
+			int32_t retval = sys_page_map(thisenv->env_id, (void*)va, child, (void*)va, uvpt_entry & PTE_SYSCALL);
+			if (retval < 0) {
+				panic("sys_page_map: %d", retval);
+			}
+		}
+	}
 	return 0;
 }
 
