@@ -5,6 +5,15 @@
 
 // See https://wiki.osdev.org/RTC: 0x70 is used to set address for CMOS RAM (address is 0x0A, 0x0B, 0x0C as only 3 regs are availiable)
 // 0x71 is used to send data to that address.
+int gettime(void)
+{
+	nmi_disable();
+	// LAB 12: your code here
+
+	nmi_enable();
+	return 0;
+}
+
 void
 rtc_init(void)
 {
