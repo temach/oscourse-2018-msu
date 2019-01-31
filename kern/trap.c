@@ -2,6 +2,7 @@
 #include <inc/x86.h>
 #include <inc/assert.h>
 #include <inc/string.h>
+#include <inc/vsyscall.h>
 
 #include <kern/pmap.h>
 #include <kern/trap.h>
@@ -13,6 +14,7 @@
 #include <kern/kclock.h>
 #include <kern/picirq.h>
 #include <kern/cpu.h>
+#include <kern/vsyscall.h>
 
 #ifndef debug
 # define debug 0
@@ -247,8 +249,14 @@ trap_dispatch(struct Trapframe *tf)
 	if (tf->tf_trapno == IRQ_OFFSET + IRQ_CLOCK) {
 		// read RTC status reg just to recet the interrupt flag
 		(void)rtc_check_status();
+
+		// update time in memory
+		int32_t time = gettime();
+		vsys[VSYS_gettime] = time;
+
 		// send EndOfInterrupt with IRQ_CLOCK as value
 		pic_send_eoi(IRQ_CLOCK);
+
 		sched_yield();
 		return;
 	}

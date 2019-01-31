@@ -54,8 +54,8 @@
  * UTOP,UENVS ------>  +------------------------------+ 0xdec00000
  * UXSTACKTOP -/       |     User Exception Stack     | RW/RW  PGSIZE
  *                     +------------------------------+ 0xdebff000
- *                     |       Empty Memory (*)       | --/--  PGSIZE
- *    USTACKTOP  --->  +------------------------------+ 0xdebfe000
+ *                     |    RO UVSYS Virt Syscall     | RW/R-  PGSIZE
+ * UVSYS, USTACKTOP -> +------------------------------+ 0xdebfe000
  *                     |      Normal User Stack       | RW/RW  PGSIZE
  *                     +------------------------------+ 0xdebfd000
  *                     |                              |
@@ -120,7 +120,7 @@
 #define UENVS		(UPAGES - PTSIZE)
 // Read-only virtual syscall space
 // LAB 12: Your code here.
-#define UVSYS       0
+#define UVSYS       0xdebfe000
 
 /*
  * Top of user VM. User can manipulate VA from UTOP-1 and down!

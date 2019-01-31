@@ -30,6 +30,9 @@
 #define RTC_AIE		0x20
 #define RTC_UIE		0x10
 
+#define RTC_DM		0x04
+#define RTC_24		0x02
+
 void rtc_init(void);
 uint8_t rtc_check_status(void);
 

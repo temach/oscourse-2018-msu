@@ -182,6 +182,8 @@ mem_init(void)
 	//////////////////////////////////////////////////////////////////////
 	// Make 'vsys' point to an array of size 'NVSYSCALLS' of int.
 	// LAB 12: Your code here.
+	vsys = boot_alloc(sizeof(int32_t) * NVSYSCALLS);
+	memset(vsys, 0, sizeof(int32_t) * NVSYSCALLS);
 
 	//////////////////////////////////////////////////////////////////////
 	// Now that we've allocated the initial kernel data structures, we set
@@ -235,8 +237,16 @@ mem_init(void)
 	// (ie. perm = PTE_U | PTE_P).
 	// Permissions:
 	//    - the new image at UVSYS  -- kernel R, user R
-	//    - envs itself -- kernel RW, user NONE
+	//    - vsys itself -- kernel RW, user NONE
 	// LAB 12: Your code here.
+	i = 0;
+	n = ROUNDUP(NVSYSCALLS * sizeof(int32_t), PGSIZE);
+	for (i = 0; i < n; i += PGSIZE) {
+		struct PageInfo* page_with_vsys_ints = pa2page(PADDR(vsys) + i);
+		page_insert(kern_pgdir, page_with_vsys_ints, (void*)(UVSYS + i), PTE_U);
+		// this is a hack, because page_insert increments ref
+		page_with_vsys_ints->pp_ref--;
+	}
 
 	//////////////////////////////////////////////////////////////////////
 	// Use the physical memory that 'bootstack' refers to as the kernel
